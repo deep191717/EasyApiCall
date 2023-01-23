@@ -32,7 +32,7 @@ import okhttp3.ResponseBody;
 
 public class Api {
 
-    private String BASE_URL = "https://drpriteshinstitute.com/";
+    private String BASE_URL = "";
     private String method;
     private final ShowProgress showProgress;
     private ShowNoInternet showNoInternet;
@@ -174,83 +174,6 @@ public class Api {
         BASE_URL = BASE_URL + subFolder + "/";
         return this;
     }
-
-    public void call(ServerUrl url, @NonNull Response response) {
-        dismissInternet();
-        if (checkInternet()) {
-            setPerms();
-            new Thread(() -> {
-                try {
-
-                    OkHttpClient client = new OkHttpClient().newBuilder()
-                            .build();
-                    //MediaType mediaType = MediaType.parse("text/plain");
-
-                    Log.e(TAG, "call: " + BASE_URL + url.value);
-
-                    Request request = new Request.Builder()
-                            .url(BASE_URL + url.value)
-                            .method(method, body)
-                            .build();
-                    okhttp3.Response res = client.newCall(request).execute();
-
-                    int responseCode = res.code();
-                    StringBuilder sBuilder1 = new StringBuilder();
-
-                    if (responseCode == HttpsURLConnection.HTTP_OK) {
-                        String line;
-                        ResponseBody responseBody = res.body();
-
-                        try {
-                            BufferedReader br = new BufferedReader(new InputStreamReader(responseBody.byteStream()));
-                            while ((line = br.readLine()) != null) {
-                                sBuilder1.append(line).append("\n");
-                            }
-                            Log.e(TAG, "call: " + sBuilder1);
-                            if (!sBuilder1.toString().trim().isEmpty()) {
-                                JSONObject jsonObject = new JSONObject(sBuilder1.toString());
-                                String success = jsonObject.getString("res");
-                                String message = jsonObject.getString("msg");
-
-
-                                if (success.matches("success")) {
-                                    String data = jsonObject.getString("data");
-                                    Object json = new JSONTokener(data).nextValue();
-                                    if (json instanceof JSONObject) {
-                                        activity.runOnUiThread(() -> response.onSuccess((JSONObject) json));
-                                    } else if (json instanceof JSONArray) {
-                                        activity.runOnUiThread(() -> response.onSuccess((JSONArray) json));
-                                    } else {
-                                        activity.runOnUiThread(() -> response.onSuccess(data));
-                                    }
-
-                                } else {
-                                    activity.runOnUiThread(() -> response.onFailed(responseCode, message));
-                                }
-                            } else {
-                                activity.runOnUiThread(() -> response.onFailed(responseCode, "No Request Found For this Date."));
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            activity.runOnUiThread(() -> response.onFailed(responseCode, "No Request Found For this Date."));
-                        }
-
-                    } else {
-                        activity.runOnUiThread(() -> response.onFailed(responseCode, res.message().isEmpty() ? "Page Not Found" : res.message()));
-                    }
-
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    activity.runOnUiThread(() -> response.onFailed(500, e.getMessage()));
-                }
-            }).start();
-        } else {
-            Log.e(TAG, "call: no internet");
-            showNoInternet(response);
-        }
-    }
-
-
 
     public void showProgress() {
         if (canShowProgress) {
