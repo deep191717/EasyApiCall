@@ -18,7 +18,7 @@ Step 2. Add the dependency
 
  
  
- 
+Step 3. Implement that methode
  
  
        Api.with(this).setRequestMethod(RequestMethod.GET).call("https://google.com/", new Response() {
