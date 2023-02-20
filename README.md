@@ -21,12 +21,11 @@ Step 2. Add the dependency
  
  
  
- Api.with(this).setRequestMethod(RequestMethod.GET).call("https://google.com/", new Response() {
+       Api.with(this).setRequestMethod(RequestMethod.GET).call("https://google.com/", new Response() {
             @Override
             public void onSuccess(JSONObject jsonObject) {
                 super.onSuccess(jsonObject);
             }
-
             @Override
             public void onFailed(int code, String exception) {
                 super.onFailed(code, exception);
