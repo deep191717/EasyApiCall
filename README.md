@@ -16,6 +16,11 @@ Step 2. Add the dependency
 	}
 
 
+ 
+ 
+ 
+ 
+ 
  Api.with(this).setRequestMethod(RequestMethod.GET).call("https://google.com/", new Response() {
             @Override
             public void onSuccess(JSONObject jsonObject) {
