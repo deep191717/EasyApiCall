@@ -58,8 +58,8 @@ public class Api {
     Context context;
     String TAG;
 
-    public static Api with(String tag) {
-        return new Api(tag);
+    public static Api with(String tag,String baseUrl) {
+        return new Api(tag,baseUrl);
     }
     public static Api with(Activity activity) {
         return new Api(activity, activity.getClass().getSimpleName());
@@ -76,9 +76,11 @@ public class Api {
     private RequestBody body;
     private HashMap<String, String> perms = null;
 
-    public Api(String TAG) {
+    public Api(String TAG,String baseUrl) {
         this.TAG = TAG;
+        this.BASE_URL = baseUrl;
     }
+
     public Api(Activity activity, String TAG) {
         this.activity = activity;
         this.TAG = TAG;
