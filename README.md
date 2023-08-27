@@ -13,7 +13,7 @@ Step 2. Add the dependency
 
 	dependencies {
                 implementation 'com.google.code.gson:gson:2.8.7'
-	        implementation 'com.github.deep191717:EasyApiCall:1.0'
+	        implementation 'com.github.deep191717:EasyApiCall:1.1'
 	}
 
 
