@@ -4,9 +4,13 @@ import android.app.Activity;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+
+import com.google.gson.Gson;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -20,6 +24,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -34,7 +40,7 @@ public class Api {
 
     private String BASE_URL = "";
     private String method;
-    private final ShowProgress showProgress;
+    private ShowProgress showProgress;
     private ShowNoInternet showNoInternet;
     private boolean canShowProgress = false;
 
@@ -52,6 +58,9 @@ public class Api {
     Context context;
     String TAG;
 
+    public static Api with(String tag) {
+        return new Api(tag);
+    }
     public static Api with(Activity activity) {
         return new Api(activity, activity.getClass().getSimpleName());
     }
@@ -67,6 +76,9 @@ public class Api {
     private RequestBody body;
     private HashMap<String, String> perms = null;
 
+    public Api(String TAG) {
+        this.TAG = TAG;
+    }
     public Api(Activity activity, String TAG) {
         this.activity = activity;
         this.TAG = TAG;
@@ -119,7 +131,7 @@ public class Api {
             }
             Log.e(TAG, "setPerm: " + key + " = " + value);
             builder.addFormDataPart(key, value);
-        }else if ("GET".equals(method)){
+        } else if ("GET".equals(method)) {
             setPerms(key, value);
         }
         return this;
@@ -176,23 +188,36 @@ public class Api {
     }
 
     public void showProgress() {
-        if (canShowProgress) {
+        if (canShowProgress && showProgress!=null) {
             showProgress.Show();
         }
     }
 
     public void dismissProgress() {
-        if (canShowProgress) {
+        if (canShowProgress && showProgress!=null) {
             showProgress.Dismiss();
         }
     }
 
+    public Class<?> dataTo(String jsonData,Class<?> pojo){
+        try{
+            return (Class<?>) new Gson().fromJson(jsonData,pojo);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        return null;
+    }
+
     public void showInternet() {
-        showNoInternet.Show();
+        if (showNoInternet!=null) {
+            showNoInternet.Show();
+        }
     }
 
     public void dismissInternet() {
-        showNoInternet.Dismiss();
+        if (showNoInternet!=null) {
+            showNoInternet.Dismiss();
+        }
     }
 
     public void call(String url, @NonNull Response response) {
@@ -227,25 +252,29 @@ public class Api {
             }
             String finalUrl = url;
             showProgress();
-            new Thread(() -> {
-                try {
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            Handler handler = new Handler(Looper.getMainLooper());
+            executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
 
 //                String PROXY_SERVER_HOST = "promotionwala.co.in";
 //                int PROXY_SERVER_PORT = 8088;
 //                Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(PROXY_SERVER_HOST, PROXY_SERVER_PORT));
 
-                    OkHttpClient client = new OkHttpClient().newBuilder()
-                            .build();
-                    //MediaType mediaType = MediaType.parse("text/plain");
+                        OkHttpClient client = new OkHttpClient().newBuilder()
+                                .build();
+                        //MediaType mediaType = MediaType.parse("text/plain");
 
-                    Log.e(TAG, "call: " + BASE_URL + finalUrl);
+                        Log.e(TAG, "call: " + BASE_URL + finalUrl);
 
-                    Request request = new Request.Builder()
-                            .url(BASE_URL + finalUrl)
-                            .method(method, body)
-                            .build();
-                    okhttp3.Response res = client.newCall(request).execute();
-                    //Log.e(TAG, "call: "+res.headers());
+                        Request request = new Request.Builder()
+                                .url(BASE_URL + finalUrl)
+                                .method(method, body)
+                                .build();
+                        okhttp3.Response res = client.newCall(request).execute();
+                        //Log.e(TAG, "call: "+res.headers());
 
 //                List<String> Cookielist = res.headers().values("Set-Cookie");
 //                for (String s : Cookielist){
@@ -254,80 +283,87 @@ public class Api {
 //                String v = (Cookielist .get(0).split(";"))[0];
 //                Log.e(TAG, "call: "+jsessionid );
 
-                    int responseCode = res.code();
-                    StringBuilder sBuilder1 = new StringBuilder();
+                        int responseCode = res.code();
+                        StringBuilder sBuilder1 = new StringBuilder();
 
-                    if (responseCode == HttpsURLConnection.HTTP_OK) {
-                        String line;
-                        ResponseBody responseBody = res.body();
+                        if (responseCode == HttpsURLConnection.HTTP_OK) {
+                            String line;
+                            ResponseBody responseBody = res.body();
 
-                        try {
-                            BufferedReader br = new BufferedReader(new InputStreamReader(responseBody.byteStream()));
-                            while ((line = br.readLine()) != null) {
-                                sBuilder1.append(line).append("\n");
-                            }
-                            Log.e(TAG, "call: " + sBuilder1);
-                            if (!sBuilder1.toString().trim().isEmpty()) {
-                                JSONObject jsonObject = new JSONObject(sBuilder1.toString());
-                                String success = jsonObject.getString("res");
-                                String message = jsonObject.getString("msg");
-
-
-                                if (success.matches("success")) {
-                                    Log.e(TAG, "call: in");
-                                    String data = jsonObject.getString("data");
-                                    Object json = new JSONTokener(data).nextValue();
+                            try {
+                                BufferedReader br = new BufferedReader(new InputStreamReader(responseBody.byteStream()));
+                                while ((line = br.readLine()) != null) {
+                                    sBuilder1.append(line).append("\n");
+                                }
+                                Log.e(TAG, "call: " + sBuilder1);
+                                if (!sBuilder1.toString().trim().isEmpty()) {
+                                    Object json = new JSONTokener(sBuilder1.toString()).nextValue();
                                     if (json instanceof JSONObject) {
-                                        if (activity != null) {
+                                        JSONObject jsonObject = new JSONObject(sBuilder1.toString());
+                                        if (jsonObject.has("res")) {
+                                            String success = jsonObject.getString("res");
+                                            String message = jsonObject.getString("msg");
+                                            if (success.matches("success")) {
+                                                Log.e(TAG, "call: in");
+                                                String data = jsonObject.getString("data");
+                                                Object json1 = new JSONTokener(data).nextValue();
+                                                if (json1 instanceof JSONObject) {
+                                                    dismissProgress();
+                                                    handler.post(() -> response.onSuccess((JSONObject) json1));
+                                                } else if (json1 instanceof JSONArray) {
+                                                    dismissProgress();
+                                                    handler.post(() -> response.onSuccess((JSONArray) json1));
+                                                }
+                                                dismissProgress();
+                                                handler.post(() -> response.onSuccess(data));
+
+                                            } else {
+                                                dismissProgress();
+                                                handler.post(() -> response.onFailed(responseCode, message));
+                                            }
+                                        }else {
                                             dismissProgress();
-                                            activity.runOnUiThread(() -> response.onSuccess((JSONObject) json));
+                                            handler.post(() -> response.onSuccess((JSONObject) json));
                                         }
                                     } else if (json instanceof JSONArray) {
-                                        if (activity != null) {
-                                            dismissProgress();
-                                            activity.runOnUiThread(() -> response.onSuccess((JSONArray) json));
-                                        }
+                                        dismissProgress();
+                                        handler.post(() -> response.onSuccess((JSONArray) json));
                                     } else {
-                                        if (activity != null) {
-                                            dismissProgress();
-                                            activity.runOnUiThread(() -> response.onSuccess(data));
-                                        }
+                                        dismissProgress();
+                                        handler.post(() -> response.onSuccess(sBuilder1.toString()));
                                     }
                                 } else {
-                                    if (activity != null) {
-                                        dismissProgress();
-                                        activity.runOnUiThread(() -> response.onFailed(responseCode, message));
-                                    }
-                                }
-                            } else {
-                                if (activity != null) {
+
                                     dismissProgress();
-                                    activity.runOnUiThread(() -> response.onFailed(responseCode, "No Request Found For this Data."));
+                                    handler.post(() -> response.onFailed(responseCode, "No Request Found For this Data."));
+
                                 }
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            if (activity != null) {
+                            } catch (Exception e) {
+                                e.printStackTrace();
+
                                 dismissProgress();
-                                activity.runOnUiThread(() -> response.onFailed(responseCode, "No Request Found For this Data. due to exception"));
+                                handler.post(() -> response.onFailed(responseCode, "No Request Found For this Data. due to exception"));
+
                             }
-                        }
 
-                    } else {
-                        if (activity != null) {
+                        } else {
+
                             dismissProgress();
-                            activity.runOnUiThread(() -> response.onFailed(responseCode, res.message().isEmpty() ? "Page Not Found" : res.message()));
-                        }
-                    }
+                            handler.post(() -> response.onFailed(responseCode, res.message().isEmpty() ? "Page Not Found" : res.message()));
 
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    if (activity != null) {
+                        }
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
+
                         dismissProgress();
-                        activity.runOnUiThread(() -> response.onFailed(500, e.getMessage()));
+                        handler.post(() -> response.onFailed(500, e.getMessage()));
+
                     }
                 }
-            }).start();
+            });
+
+
         } else {
             Log.e(TAG, "call: no internet ");
             showNoInternet(response);
@@ -337,11 +373,11 @@ public class Api {
     private void showNoInternet(Response response) {
         if (activity != null) {
             if (response.getContext() != null) {
-                activity.runOnUiThread(() -> response.onFailed(0, "No Internet Connection"));
+                response.onFailed(0, "No Internet Connection");
             } else {
                 if (activity != null) {
                     response.with(activity);
-                    activity.runOnUiThread(() -> response.onFailed(0, "No Internet Connection"));
+                    response.onFailed(0, "No Internet Connection");
                 }
             }
         }
@@ -355,6 +391,10 @@ public class Api {
             con = activity;
         } else {
             con = context;
+        }
+        if (context==null){
+            Log.e(TAG, "checkInternet: UNABLE TO CHECK this is background process");
+            return true;
         }
         ConnectivityManager cm = (ConnectivityManager) con.getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
@@ -380,7 +420,7 @@ public class Api {
     private String embedUrl(String url) {
         StringBuilder u = new StringBuilder();
         u.append(url);
-        if (perms!=null && perms.entrySet().size() > 0) {
+        if (perms != null && perms.entrySet().size() > 0) {
             u.append("?");
             for (Map.Entry<String, String> entry : perms.entrySet()) {
                 u.append(entry.getKey()).append("=").append(entry.getValue()).append("&");

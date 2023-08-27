@@ -1,8 +1,8 @@
 package com.deep.easyapicall;
 
-import androidx.appcompat.app.AppCompatActivity;
-
 import android.os.Bundle;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import com.deep.apicall.Api;
 import com.deep.apicall.RequestMethod;
@@ -16,7 +16,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Api.with(this).setRequestMethod(RequestMethod.GET).call("https://google.com/", new Response() {
+
+        Api.with("MainActivity").setRequestMethod(RequestMethod.GET).call("https://google.com/", new Response() {
             @Override
             public void onSuccess(JSONObject jsonObject) {
                 super.onSuccess(jsonObject);

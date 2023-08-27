@@ -56,9 +56,11 @@ public abstract class Response implements ApiInterface {
         Log.e("Api Response", "onFailed: "+code+"\nreason: "+exception );
         if (code != 200 && code!=0) {
             try {
-                AlertDialog.Builder noInternetBuilder = new AlertDialog.Builder(context);
-                noInternetBuilder.setMessage(ex);
-                noInternetBuilder.create().show();
+                if (context!=null) {
+                    AlertDialog.Builder noInternetBuilder = new AlertDialog.Builder(context);
+                    noInternetBuilder.setMessage(ex);
+                    noInternetBuilder.create().show();
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
