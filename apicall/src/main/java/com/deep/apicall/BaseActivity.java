@@ -1,9 +1,11 @@
 package com.deep.apicall;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.OpenableColumns;
 import android.view.View;
 import android.widget.ImageView;
@@ -15,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 
 import com.deep.apicall.ImagePojo;
 import com.deep.apicall.FileUtils;
+import com.google.android.material.snackbar.Snackbar;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,8 +41,13 @@ public class BaseActivity extends SubBaseActivity {
 
     public void checkCaptureImagePermission(ImageView profile_image) {
         this.profile_image = profile_image;
-        captureImagePermission.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE);
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            captureImagePermission.launch(Manifest.permission.READ_MEDIA_IMAGES);
+        }else {
+            captureImagePermission.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE);
+        }
     }
+
 
     private void captureImage() {
         try {
@@ -87,7 +95,7 @@ public class BaseActivity extends SubBaseActivity {
             });
 
     private void showSnackbar(View viewById, String s) {
-
+        Snackbar.make(viewById,s,Snackbar.LENGTH_SHORT).show();
     }
 
     private String getNameWithoutExtension(String fileName) {
