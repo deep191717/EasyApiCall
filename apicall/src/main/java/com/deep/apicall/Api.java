@@ -140,18 +140,36 @@ public class Api {
     }
 
     public Api setPerm(Object object) {
-        if (builder == null) {
-            builder = new MultipartBody.Builder().setType(type);
-        }
-        for (Field field : object.getClass().getDeclaredFields()) {
-            for (Method method : object.getClass().getDeclaredMethods()) {
-                if (method.getName().startsWith("get") && method.getName().length() == (field.getName().length() + 3) && method.getName().toLowerCase().endsWith(field.getName().toLowerCase())) {
-                    try {
-                        Object value = method.invoke(object);
-                        Log.e(TAG, "setPrem: " + field.getName() + " = " + value);
-                        builder.addFormDataPart(field.getName(), value == null ? "" : (String) value);
-                    } catch (IllegalAccessException | InvocationTargetException | ClassCastException e) {
-                        e.printStackTrace();
+        if ("POST".equals(method)) {
+            if (builder == null) {
+                builder = new MultipartBody.Builder().setType(type);
+            }
+            for (Field field : object.getClass().getDeclaredFields()) {
+                for (Method method : object.getClass().getDeclaredMethods()) {
+                    if (method.getName().startsWith("get") && method.getName().length() == (field.getName().length() + 3) && method.getName().toLowerCase().endsWith(field.getName().toLowerCase())) {
+                        try {
+                            Object value = method.invoke(object);
+                            Log.e(TAG, "setPrem: " + field.getName() + " = " + value);
+                            builder.addFormDataPart(field.getName(), value == null ? "" : (String) value);
+                        } catch (IllegalAccessException | InvocationTargetException |
+                                 ClassCastException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        }else if ("GET".equals(method)){
+            for (Field field : object.getClass().getDeclaredFields()) {
+                for (Method method : object.getClass().getDeclaredMethods()) {
+                    if (method.getName().startsWith("get") && method.getName().length() == (field.getName().length() + 3) && method.getName().toLowerCase().endsWith(field.getName().toLowerCase())) {
+                        try {
+                            Object value = method.invoke(object);
+                            Log.e(TAG, "setPrem: " + field.getName() + " = " + value);
+                            setPerms(field.getName(), value == null ? "" : (String) value);
+                        } catch (IllegalAccessException | InvocationTargetException |
+                                 ClassCastException e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
             }
@@ -161,11 +179,16 @@ public class Api {
 
 
     public Api setPerm(String key, String fileName, String url) {
-        if (builder == null) {
-            builder = new MultipartBody.Builder().setType(type);
+        if ("POST".equals(method)) {
+            if (builder == null) {
+                builder = new MultipartBody.Builder().setType(type);
+            }
+            Log.e(TAG, "setPerm: " + key + " : File url = " + url + "\nFile name = " + fileName);
+            builder.addFormDataPart(key, fileName, RequestBody.create(MediaType.parse("application/octet-stream"),
+                    new File(url)));
+        }else if ("GET".equals(method)){
+            Log.e(TAG, "setPerm: "+key+" = NOT ALLOW IN GET" );
         }
-        builder.addFormDataPart(key, fileName, RequestBody.create(MediaType.parse("application/octet-stream"),
-                new File(url)));
         return this;
     }
 
@@ -394,7 +417,7 @@ public class Api {
         } else {
             con = context;
         }
-        if (context==null){
+        if (con==null){
             Log.e(TAG, "checkInternet: UNABLE TO CHECK this is background process");
             return true;
         }
