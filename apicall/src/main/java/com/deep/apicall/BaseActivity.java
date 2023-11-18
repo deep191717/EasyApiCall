@@ -2,6 +2,7 @@ package com.deep.apicall;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
@@ -28,6 +29,11 @@ public class BaseActivity extends SubBaseActivity {
     ImageView profile_image;
     public List<ImagePojo> profileImageList;
     boolean image = true;
+    boolean crop = false;
+
+    public void setCrop(boolean crop) {
+        this.crop = crop;
+    }
 
     @Override
     protected void onStart() {
@@ -61,6 +67,24 @@ public class BaseActivity extends SubBaseActivity {
         }
     }
 
+    private void cropImage(Uri picUri) {
+        try {
+
+            Intent cropIntent = new Intent("com.android.camera.action.CROP");
+            cropIntent.setDataAndType(picUri, "image/*");
+            cropIntent.putExtra("crop", "true");
+            cropIntent.putExtra("aspectX", 2);
+            cropIntent.putExtra("aspectY", 2);
+            cropIntent.putExtra("outputX", 256);
+            cropIntent.putExtra("outputY", 256);
+            cropIntent.putExtra("return-data", true);
+            cropImageResult.launch(cropIntent);
+        }
+        catch (ActivityNotFoundException e) {
+            showSnackbar(findViewById(android.R.id.content), "Your device is not supporting the crop action");
+        }
+    }
+
     ActivityResultLauncher<String> captureImagePermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(),
             result -> {
                 if (result) {
@@ -78,14 +102,18 @@ public class BaseActivity extends SubBaseActivity {
                     if (result.getResultCode() == Activity.RESULT_OK) {
                         Intent data = result.getData();
                         if (data != null) {
-                            ImagePojo imagePojo = new ImagePojo();
-                            imagePojo.setImageUrl(FileUtils.getPath(BaseActivity.this, data.getData()));
-                            imagePojo.setImageName(getNameWithoutExtension(getFileName(data.getData())));
-                            imagePojo.setImageNameWithExtensions(getFileName(data.getData()));
-                            profileImageList.add(imagePojo);
-                            onImageSelected(profileImageList);
-                            if (image) {
-                                profile_image.setImageURI(data.getData());
+                            if (crop){
+                                cropImage(data.getData());
+                            }else {
+                                ImagePojo imagePojo = new ImagePojo();
+                                imagePojo.setImageUrl(FileUtils.getPath(BaseActivity.this, data.getData()));
+                                imagePojo.setImageName(getNameWithoutExtension(getFileName(data.getData())));
+                                imagePojo.setImageNameWithExtensions(getFileName(data.getData()));
+                                profileImageList.add(imagePojo);
+                                onImageSelected(profileImageList);
+                                if (image) {
+                                    profile_image.setImageURI(data.getData());
+                                }
                             }
                         } else {
                             showSnackbar(findViewById(android.R.id.content), "Image not selected.");
@@ -93,6 +121,28 @@ public class BaseActivity extends SubBaseActivity {
                     }
                 }
             });
+
+    ActivityResultLauncher<Intent> cropImageResult = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), new ActivityResultCallback<ActivityResult>() {
+        @Override
+        public void onActivityResult(ActivityResult result) {
+            if (result.getResultCode() == Activity.RESULT_OK) {
+                Intent data = result.getData();
+                if (data != null) {
+                    ImagePojo imagePojo = new ImagePojo();
+                    imagePojo.setImageUrl(FileUtils.getPath(BaseActivity.this, data.getData()));
+                    imagePojo.setImageName(getNameWithoutExtension(getFileName(data.getData())));
+                    imagePojo.setImageNameWithExtensions(getFileName(data.getData()));
+                    profileImageList.add(imagePojo);
+                    onImageSelected(profileImageList);
+                    if (image) {
+                        profile_image.setImageURI(data.getData());
+                    }
+                } else {
+                    showSnackbar(findViewById(android.R.id.content), "Image not selected.");
+                }
+            }
+        }
+    });
 
     private void showSnackbar(View viewById, String s) {
         Snackbar.make(viewById,s,Snackbar.LENGTH_SHORT).show();

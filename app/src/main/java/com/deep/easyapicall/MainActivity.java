@@ -5,12 +5,13 @@ import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.deep.apicall.Api;
+import com.deep.apicall.BaseActivity;
 import com.deep.apicall.RequestMethod;
 import com.deep.apicall.Response;
 
 import org.json.JSONObject;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends BaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,5 +29,8 @@ public class MainActivity extends AppCompatActivity {
                 super.onFailed(code, exception);
             }
         });
+
+        setCrop(true);
+        checkCaptureImagePermission(findViewById(R.id.img));
     }
 }
