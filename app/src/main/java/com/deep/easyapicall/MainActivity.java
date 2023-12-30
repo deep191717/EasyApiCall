@@ -31,6 +31,7 @@ public class MainActivity extends BaseActivity {
         });
 
         setCrop(true);
+        setCapture(true);
         checkCaptureImagePermission(findViewById(R.id.img));
     }
 }

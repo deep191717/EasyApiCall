@@ -3,10 +3,13 @@ package com.deep.apicall;
 import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.view.View;
 import android.widget.ImageView;
@@ -20,6 +23,7 @@ import com.deep.apicall.ImagePojo;
 import com.deep.apicall.FileUtils;
 import com.google.android.material.snackbar.Snackbar;
 
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -30,6 +34,8 @@ public class BaseActivity extends SubBaseActivity {
     public List<ImagePojo> profileImageList;
     boolean image = true;
     boolean crop = false;
+    boolean capture = false;
+    String[] mimeTypes = {"image/jpg", "image/jpeg", "image/png"};
 
     public void setCrop(boolean crop) {
         this.crop = crop;
@@ -39,6 +45,14 @@ public class BaseActivity extends SubBaseActivity {
     protected void onStart() {
         super.onStart();
         profileImageList = new ArrayList<>();
+    }
+
+    public void setCapture(boolean capture) {
+        this.capture = capture;
+    }
+
+    public void setMimeTypes(String[] mimeTypes) {
+        this.mimeTypes = mimeTypes;
     }
 
     public void setImage(boolean image) {
@@ -57,7 +71,19 @@ public class BaseActivity extends SubBaseActivity {
 
     private void captureImage() {
         try {
-            String[] mimeTypes = {"image/jpg", "image/jpeg", "image/png"};
+//            String[] mimeTypes = {"image/jpg", "image/jpeg", "image/png"};
+            Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+//            intent.setType("image/*");
+//            intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+            selectImage.launch(intent);
+        } catch (Exception e) {
+            showSnackbar(findViewById(android.R.id.content), "Photo not found.");
+        }
+    }
+
+    private void chooseImage() {
+        try {
+//            String[] mimeTypes = {"image/jpg", "image/jpeg", "image/png"};
             Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
             intent.setType("image/*");
             intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
@@ -78,6 +104,8 @@ public class BaseActivity extends SubBaseActivity {
             cropIntent.putExtra("outputX", 256);
             cropIntent.putExtra("outputY", 256);
             cropIntent.putExtra("return-data", true);
+//            cropIntent.setClassName("com.google.android.gallery3d", "com.android.gallery3d.app.CropImage");
+
             cropImageResult.launch(cropIntent);
         }
         catch (ActivityNotFoundException e) {
@@ -88,7 +116,11 @@ public class BaseActivity extends SubBaseActivity {
     ActivityResultLauncher<String> captureImagePermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(),
             result -> {
                 if (result) {
-                    captureImage();
+                    if (capture){
+                        captureImage();
+                    }else {
+                        chooseImage();
+                    }
                 } else {
                     showSnackbar(findViewById(android.R.id.content), "READ EXTERNAL STORAGE permission needed to upload your profile.");
                 }
@@ -102,19 +134,24 @@ public class BaseActivity extends SubBaseActivity {
                     if (result.getResultCode() == Activity.RESULT_OK) {
                         Intent data = result.getData();
                         if (data != null) {
-                            if (crop){
-                                cropImage(data.getData());
-                            }else {
-                                ImagePojo imagePojo = new ImagePojo();
-                                imagePojo.setImageUrl(FileUtils.getPath(BaseActivity.this, data.getData()));
-                                imagePojo.setImageName(getNameWithoutExtension(getFileName(data.getData())));
-                                imagePojo.setImageNameWithExtensions(getFileName(data.getData()));
-                                profileImageList.add(imagePojo);
-                                onImageSelected(profileImageList);
-                                if (image) {
-                                    profile_image.setImageURI(data.getData());
+                            Uri uri = data.getData();
+                        if (capture){
+                            Bitmap photo = (Bitmap) data.getExtras().get("data");
+                            uri = getImageUri(BaseActivity.this,photo);
+                        }
+                                if (crop) {
+                                    cropImage(uri);
+                                } else {
+                                    ImagePojo imagePojo = new ImagePojo();
+                                    imagePojo.setImageUrl(FileUtils.getPath(BaseActivity.this, uri));
+                                    imagePojo.setImageName(getNameWithoutExtension(getFileName(uri)));
+                                    imagePojo.setImageNameWithExtensions(getFileName(uri));
+                                    profileImageList.add(imagePojo);
+                                    onImageSelected(profileImageList);
+                                    if (image) {
+                                        profile_image.setImageURI(uri);
+                                    }
                                 }
-                            }
                         } else {
                             showSnackbar(findViewById(android.R.id.content), "Image not selected.");
                         }
@@ -187,6 +224,25 @@ public class BaseActivity extends SubBaseActivity {
 
     }
 
+    public Uri getImageUri(Context inContext, Bitmap inImage) {
+        Bitmap OutImage = Bitmap.createScaledBitmap(inImage, 1000, 1000,true);
+        String path = MediaStore.Images.Media.insertImage(inContext.getContentResolver(), OutImage, "Title", null);
+        return Uri.parse(path);
+    }
+
+    public String getRealPathFromURI(Uri uri) {
+        String path = "";
+        if (getContentResolver() != null) {
+            Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null) {
+                cursor.moveToFirst();
+                int idx = cursor.getColumnIndex(MediaStore.Images.ImageColumns.DATA);
+                path = cursor.getString(idx);
+                cursor.close();
+            }
+        }
+        return path;
+    }
 
 
 }
