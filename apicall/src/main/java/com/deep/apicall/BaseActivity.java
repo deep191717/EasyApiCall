@@ -9,8 +9,10 @@ import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 
@@ -18,12 +20,16 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.content.FileProvider;
 
 import com.deep.apicall.ImagePojo;
 import com.deep.apicall.FileUtils;
 import com.google.android.material.snackbar.Snackbar;
+import com.yalantis.ucrop.UCrop;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -63,7 +69,7 @@ public class BaseActivity extends SubBaseActivity {
         this.profile_image = profile_image;
         if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             captureImagePermission.launch(Manifest.permission.READ_MEDIA_IMAGES);
-        }else {
+        } else {
             captureImagePermission.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE);
         }
     }
@@ -107,8 +113,7 @@ public class BaseActivity extends SubBaseActivity {
 //            cropIntent.setClassName("com.google.android.gallery3d", "com.android.gallery3d.app.CropImage");
 
             cropImageResult.launch(cropIntent);
-        }
-        catch (ActivityNotFoundException e) {
+        } catch (ActivityNotFoundException e) {
             showSnackbar(findViewById(android.R.id.content), "Your device is not supporting the crop action");
         }
     }
@@ -116,9 +121,9 @@ public class BaseActivity extends SubBaseActivity {
     ActivityResultLauncher<String> captureImagePermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(),
             result -> {
                 if (result) {
-                    if (capture){
+                    if (capture) {
                         captureImage();
-                    }else {
+                    } else {
                         chooseImage();
                     }
                 } else {
@@ -134,14 +139,35 @@ public class BaseActivity extends SubBaseActivity {
                     if (result.getResultCode() == Activity.RESULT_OK) {
                         Intent data = result.getData();
                         if (data != null) {
-                            Uri uri = data.getData();
-                        if (capture){
-                            Bitmap photo = (Bitmap) data.getExtras().get("data");
-                            uri = getImageUri(BaseActivity.this,photo);
-                        }
+                            try {
+                                Uri uri = data.getData();
+
                                 if (crop) {
-                                    cropImage(uri);
+                                    if (capture) {
+                                        if (uri == null && data.getExtras() != null) {
+                                            Bitmap photo = (Bitmap) data.getExtras().get("data");
+                                            uri = getImageUri(BaseActivity.this, photo);
+                                        } else {
+                                            if (uri == null) {
+                                                showSnackbar(findViewById(android.R.id.content), "Image not selected.");
+                                                return;
+                                            }
+                                        }
+                                    }
+                                    UCrop.of(uri, Uri.fromFile(new File(Environment.getExternalStorageDirectory(), getFileName(uri)))).start(BaseActivity.this);
+//                                    cropImage(uri);
                                 } else {
+                                    if (capture) {
+                                        if (data.getExtras()!=null) {
+                                            Bitmap photo = (Bitmap) data.getExtras().get("data");
+                                            uri = getImageUri(saveImageToExternalStorage(photo));
+                                        }else{
+                                            if (uri==null) {
+                                                showSnackbar(findViewById(android.R.id.content), "Image not selected.");
+                                                return;
+                                            }
+                                        }
+                                    }
                                     ImagePojo imagePojo = new ImagePojo();
                                     imagePojo.setImageUrl(FileUtils.getPath(BaseActivity.this, uri));
                                     imagePojo.setImageName(getNameWithoutExtension(getFileName(uri)));
@@ -152,6 +178,9 @@ public class BaseActivity extends SubBaseActivity {
                                         profile_image.setImageURI(uri);
                                     }
                                 }
+                            }catch (Exception e){
+                                e.printStackTrace();
+                            }
                         } else {
                             showSnackbar(findViewById(android.R.id.content), "Image not selected.");
                         }
@@ -159,20 +188,67 @@ public class BaseActivity extends SubBaseActivity {
                 }
             });
 
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        Log.e("TAG", "onActivityResult: " );
+        if (resultCode == RESULT_OK && requestCode == UCrop.REQUEST_CROP) {
+             Uri fileuri = UCrop.getOutput(data);
+            try{
+                Log.e("TAG", "onActivityResult: "+fileuri );
+                Uri uri = getImageUri(String.valueOf(fileuri));
+
+                ImagePojo imagePojo = new ImagePojo();
+                imagePojo.setImageUrl(FileUtils.getPath(BaseActivity.this, uri));
+                imagePojo.setImageName(getNameWithoutExtension(getFileName(uri)));
+                imagePojo.setImageNameWithExtensions(getFileName(uri));
+                Log.e("TAG", "onActivityResult: "+imagePojo.toString() );
+                profileImageList.add(imagePojo);
+                onImageSelected(profileImageList);
+                if (image) {
+                    profile_image.setImageURI(uri);
+                }
+            }catch (Exception e){
+                e.printStackTrace();
+            }
+        } else if (resultCode == UCrop.RESULT_ERROR) {
+            final Throwable cropError = UCrop.getError(data);
+            Log.e("TAG", "onActivityResult: ERROR" );
+            if (cropError!=null)
+                showSnackbar(findViewById(android.R.id.content), cropError.getMessage());
+
+        }
+    }
+
     ActivityResultLauncher<Intent> cropImageResult = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), new ActivityResultCallback<ActivityResult>() {
         @Override
         public void onActivityResult(ActivityResult result) {
             if (result.getResultCode() == Activity.RESULT_OK) {
                 Intent data = result.getData();
                 if (data != null) {
-                    ImagePojo imagePojo = new ImagePojo();
-                    imagePojo.setImageUrl(FileUtils.getPath(BaseActivity.this, data.getData()));
-                    imagePojo.setImageName(getNameWithoutExtension(getFileName(data.getData())));
-                    imagePojo.setImageNameWithExtensions(getFileName(data.getData()));
-                    profileImageList.add(imagePojo);
-                    onImageSelected(profileImageList);
-                    if (image) {
-                        profile_image.setImageURI(data.getData());
+                    try {
+                        Uri uri = data.getData();
+                        if (uri==null && data.getExtras() != null) {
+                            Bitmap photo = (Bitmap) data.getExtras().get("data");
+                            uri = getImageUri(saveImageToExternalStorage(photo));
+                        } else {
+                            if (uri==null) {
+                                showSnackbar(findViewById(android.R.id.content), "Image not selected.");
+                                return;
+                            }
+                        }
+
+                        ImagePojo imagePojo = new ImagePojo();
+                        imagePojo.setImageUrl(FileUtils.getPath(BaseActivity.this, uri));
+                        imagePojo.setImageName(getNameWithoutExtension(getFileName(uri)));
+                        imagePojo.setImageNameWithExtensions(getFileName(uri));
+                        profileImageList.add(imagePojo);
+                        onImageSelected(profileImageList);
+                        if (image) {
+                            profile_image.setImageURI(uri);
+                        }
+                    }catch (Exception e){
+                        e.printStackTrace();
                     }
                 } else {
                     showSnackbar(findViewById(android.R.id.content), "Image not selected.");
@@ -182,7 +258,7 @@ public class BaseActivity extends SubBaseActivity {
     });
 
     private void showSnackbar(View viewById, String s) {
-        Snackbar.make(viewById,s,Snackbar.LENGTH_SHORT).show();
+        Snackbar.make(viewById, s, Snackbar.LENGTH_SHORT).show();
     }
 
     private String getNameWithoutExtension(String fileName) {
@@ -190,30 +266,57 @@ public class BaseActivity extends SubBaseActivity {
         return name[0];
     }
 
+    private String saveImageToExternalStorage(Bitmap imageBitmap) {
+        String root = Environment.getExternalStorageDirectory().toString();
+        File myDir = new File(root + "/profile");
+        myDir.mkdirs();
+
+        String fileName = "image_" + System.currentTimeMillis() + ".jpg";
+        File file = new File(myDir, fileName);
+
+        try {
+            FileOutputStream out = new FileOutputStream(file);
+            imageBitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
+            out.flush();
+            out.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return file.getAbsolutePath();
+    }
+
+    private Uri getImageUri(String fileUri){
+        File imageFile = new File(fileUri);
+        return  Uri.fromFile(imageFile);
+    }
+
     private String getFileName(Uri uri) {
         String result = null;
-        if (uri.getScheme().equals("content")) {
-            try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
-                if (cursor != null && cursor.moveToFirst()) {
-                    int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                    if (index >= 0) {
-                        result = cursor.getString(index);
+        if (uri!=null) {
+            if (uri.getScheme().equals("content")) {
+                try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                        if (index >= 0) {
+                            result = cursor.getString(index);
+                        }
                     }
                 }
             }
-        }
-        if (result == null) {
-            result = uri.getPath();
-            int cut = result.lastIndexOf('/');
-            if (cut != -1) {
-                result = result.substring(cut + 1);
+            if (result == null) {
+                result = uri.getPath();
+                int cut = result.lastIndexOf('/');
+                if (cut != -1) {
+                    result = result.substring(cut + 1);
+                }
             }
         }
         return result;
     }
 
-    public List<String> stringToArray(String string){
-        String temp = string.replace("[","").replace("]","");
+    public List<String> stringToArray(String string) {
+        String temp = string.replace("[", "").replace("]", "");
         String[] stringArray = temp.split(",");
         return new ArrayList<>(Arrays.asList(stringArray));
     }
@@ -225,7 +328,7 @@ public class BaseActivity extends SubBaseActivity {
     }
 
     public Uri getImageUri(Context inContext, Bitmap inImage) {
-        Bitmap OutImage = Bitmap.createScaledBitmap(inImage, 1000, 1000,true);
+        Bitmap OutImage = Bitmap.createScaledBitmap(inImage, 1000, 1000, true);
         String path = MediaStore.Images.Media.insertImage(inContext.getContentResolver(), OutImage, "Title", null);
         return Uri.parse(path);
     }

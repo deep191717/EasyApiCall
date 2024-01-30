@@ -18,17 +18,17 @@ public class MainActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Api.with("MainActivity","https://google.com/").setRequestMethod(RequestMethod.GET).call("h", new Response() {
-            @Override
-            public void onSuccess(JSONObject jsonObject) {
-                super.onSuccess(jsonObject);
-            }
-
-            @Override
-            public void onFailed(int code, String exception) {
-                super.onFailed(code, exception);
-            }
-        });
+//        Api.with("MainActivity","https://google.com/").setRequestMethod(RequestMethod.GET).call("h", new Response() {
+//            @Override
+//            public void onSuccess(JSONObject jsonObject) {
+//                super.onSuccess(jsonObject);
+//            }
+//
+//            @Override
+//            public void onFailed(int code, String exception) {
+//                super.onFailed(code, exception);
+//            }
+//        });
 
         setCrop(true);
         setCapture(true);
