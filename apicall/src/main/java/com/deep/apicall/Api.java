@@ -13,11 +13,13 @@ import androidx.annotation.NonNull;
 import com.google.gson.Gson;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -26,9 +28,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.HttpsURLConnection;
 
+import okhttp3.Cache;
+import okhttp3.CacheControl;
+import okhttp3.Call;
+import okhttp3.Callback;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
@@ -43,73 +50,83 @@ public class Api {
     private ShowProgress showProgress;
     private ShowNoInternet showNoInternet;
     private boolean canShowProgress = false;
+    OkHttpClient client;
+    Context context;
+    String TAG;
 
+    public Api(Context context,String baseUrl){
+        File httpCacheDirectory = new File(context.getCacheDir(), "http-cache");
+        int cacheSize = 10 * 1024 * 1024; // 10 MiB
+        Cache cache = new Cache(httpCacheDirectory, cacheSize);
+        client = new OkHttpClient.Builder()
+                .cache(cache)
+                .connectTimeout(30, TimeUnit.SECONDS) // Increase connection timeout
+                .readTimeout(30, TimeUnit.SECONDS)    // Increase read timeout
+                .writeTimeout(30, TimeUnit.SECONDS)   // Increase write timeout
+                .build();
+        this.context = context;
+        this.BASE_URL = baseUrl;
+        this.TAG = context.getClass().getSimpleName();
+        this.showProgress = ShowProgress.init(context);
+        this.showNoInternet = ShowNoInternet.init(context);
+    }
+
+    public Api(String TAG,String baseUrl) {
+        File httpCacheDirectory = new File(context.getCacheDir(), "http-cache");
+        int cacheSize = 10 * 1024 * 1024; // 10 MiB
+        Cache cache = new Cache(httpCacheDirectory, cacheSize);
+        client = new OkHttpClient.Builder()
+                .cache(cache)
+                .connectTimeout(30, TimeUnit.SECONDS) // Increase connection timeout
+                .readTimeout(30, TimeUnit.SECONDS)    // Increase read timeout
+                .writeTimeout(30, TimeUnit.SECONDS)   // Increase write timeout
+                .build();
+        this.TAG = TAG;
+        this.BASE_URL = baseUrl;
+    }
+
+    public static Api with(Context context,String baseUrl){
+        return new Api(context,baseUrl);
+    }
+
+    public static Api with(String tag,String baseUrl){
+        return new Api(tag,baseUrl);
+    }
 
     public Api setRequestMethod(RequestMethod requestMethod) {
-        if (requestMethod == RequestMethod.GET) {
-            method = "GET";
-        } else if (requestMethod == RequestMethod.POST) {
-            method = "POST";
+        switch (requestMethod) {
+            case POST:
+                method = "POST";
+                break;
+            case PUT:
+                method = "PUT";
+                break;
+            case DELETE:
+                method = "DELETE";
+                break;
+            case GET:
+            default:
+                method = "GET";
+                break;
         }
         return this;
     }
 
-    Activity activity;
-    Context context;
-    String TAG;
+    private MediaTypes mediaType = MediaTypes.MULTIPART_FORM_DATA;
 
-    public static Api with(String tag,String baseUrl) {
-        return new Api(tag,baseUrl);
-    }
-    public static Api with(Activity activity) {
-        return new Api(activity, activity.getClass().getSimpleName());
-    }
-
-    public static Api with(Context activity) {
-        return new Api(activity, activity.getClass().getSimpleName());
-    }
-
-    public static Api with(Activity activity, String baseUrl) {
-        return new Api(activity, activity.getClass().getSimpleName(), baseUrl);
+    public Api setMediaType(MediaTypes mediaType){
+        this.mediaType = mediaType;
+        return this;
     }
 
     private RequestBody body;
     private HashMap<String, String> perms = null;
 
-    public Api(String TAG,String baseUrl) {
-        this.TAG = TAG;
-        this.BASE_URL = baseUrl;
-    }
-
-    public Api(Activity activity, String TAG) {
-        this.activity = activity;
-        this.TAG = TAG;
-        this.showProgress = ShowProgress.init(activity);
-        this.showNoInternet = ShowNoInternet.init(activity);
-    }
-
-    public Api(Context context, String TAG) {
-        this.context = context;
-        this.TAG = TAG;
-        this.showProgress = ShowProgress.init(context);
-        this.showNoInternet = ShowNoInternet.init(context);
-    }
-
-    public Api(Activity activity, String TAG, String baseUrl) {
-        this.activity = activity;
-        this.TAG = TAG;
-        this.BASE_URL = baseUrl;
-        this.showProgress = ShowProgress.init(activity);
-        this.showNoInternet = ShowNoInternet.init(activity);
-    }
-
-    @Deprecated
-    public Api setPerms(String key, String value) {
+    private void setPerms(String key, String value) {
         if (perms == null) {
             perms = new HashMap<>();
         }
         perms.put(key, value);
-        return this;
     }
 
     public Api canShowProgress(boolean canShowProgress) {
@@ -117,39 +134,45 @@ public class Api {
         return this;
     }
 
-    private MediaType type = MultipartBody.FORM;
-
-    public Api setPermsType(MediaType type) {
-        this.type = type;
-        return this;
-    }
-
     MultipartBody.Builder builder;
 
     public Api setPerm(String key, String value) {
         if ("POST".equals(method)) {
-            if (builder == null) {
-                builder = new MultipartBody.Builder().setType(type);
+            if (mediaType == MediaTypes.MULTIPART_FORM_DATA || mediaType == MediaTypes.FORM_DATA) {
+                postPerms(key, value);
+            }else if (mediaType == MediaTypes.JSON){
+                log("setPerm","Coming Soon");
+            }else{
+                log("setPerm","NOT ALLOWED");
             }
-            Log.e(TAG, "setPerm: " + key + " = " + value);
-            builder.addFormDataPart(key, value);
         } else if ("GET".equals(method)) {
             setPerms(key, value);
         }
         return this;
     }
 
+
+
+    private void postPerms(String key, String value){
+        if (builder == null) {
+            builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
+        }
+        log("setPerm",key + " = " + value);
+        builder.addFormDataPart(key, value);
+    }
+
+
     public Api setPerm(Object object) {
         if ("POST".equals(method)) {
             if (builder == null) {
-                builder = new MultipartBody.Builder().setType(type);
+                builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
             }
             for (Field field : object.getClass().getDeclaredFields()) {
                 for (Method method : object.getClass().getDeclaredMethods()) {
                     if (method.getName().startsWith("get") && method.getName().length() == (field.getName().length() + 3) && method.getName().toLowerCase().endsWith(field.getName().toLowerCase())) {
                         try {
                             Object value = method.invoke(object);
-                            Log.e(TAG, "setPrem: " + field.getName() + " = " + value);
+                            log("setPerm",field.getName() + " = " + value);
                             builder.addFormDataPart(field.getName(), value == null ? "" : (String) value);
                         } catch (IllegalAccessException | InvocationTargetException |
                                  ClassCastException e) {
@@ -164,7 +187,7 @@ public class Api {
                     if (method.getName().startsWith("get") && method.getName().length() == (field.getName().length() + 3) && method.getName().toLowerCase().endsWith(field.getName().toLowerCase())) {
                         try {
                             Object value = method.invoke(object);
-                            Log.e(TAG, "setPrem: " + field.getName() + " = " + value);
+                            log("setPerm",field.getName() + " = " + value);
                             setPerms(field.getName(), value == null ? "" : (String) value);
                         } catch (IllegalAccessException | InvocationTargetException |
                                  ClassCastException e) {
@@ -181,13 +204,13 @@ public class Api {
     public Api setPerm(String key, String fileName, String url) {
         if ("POST".equals(method)) {
             if (builder == null) {
-                builder = new MultipartBody.Builder().setType(type);
+                builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
             }
-            Log.e(TAG, "setPerm: " + key + " : File url = " + url + "\nFile name = " + fileName);
+            log("setPerm",key + " : File url = " + url + "\nFile name = " + fileName);
             builder.addFormDataPart(key, fileName, RequestBody.create(MediaType.parse("application/octet-stream"),
                     new File(url)));
         }else if ("GET".equals(method)){
-            Log.e(TAG, "setPerm: "+key+" = NOT ALLOW IN GET" );
+            log("setPerm",key + " = NOT ALLOW IN GET");
         }
         return this;
     }
@@ -195,12 +218,12 @@ public class Api {
     @Deprecated
     private void setPerms() {
         if (body == null) {
-            MultipartBody.Builder builder = new MultipartBody.Builder().setType(type);
+            MultipartBody.Builder builder = new MultipartBody.Builder().setType(MultipartBody.FORM);
             for (Map.Entry<String, String> entry : perms.entrySet()) {
                 if (entry.getKey() != null && entry.getValue() != null) {
                     builder.addFormDataPart(entry.getKey(), entry.getValue());
                 }
-                Log.e(TAG, "setPerms: " + entry.getKey() + " = " + entry.getValue());
+                log("setPerms",entry.getKey() + " = " + entry.getValue());
             }
             body = builder.build();
         }
@@ -245,14 +268,17 @@ public class Api {
         }
     }
 
+    /**
+     * ...
+     * @deprecated  To update your existing code and use the execute method instead of the deprecated
+     * ...
+     */
+    @Deprecated
     public void call(String url, @NonNull Response response) {
         dismissInternet();
         if (checkInternet()) {
 
             if (response.getContext() == null) {
-                if (activity != null) {
-                    response.with(activity);
-                }
                 if (context != null) {
                     response.with(context);
                 }
@@ -292,7 +318,7 @@ public class Api {
                                 .build();
                         //MediaType mediaType = MediaType.parse("text/plain");
 
-                        Log.e(TAG, "call: " + BASE_URL + finalUrl);
+                        log("called url",BASE_URL + finalUrl);
 
                         Request request = new Request.Builder()
                                 .url(BASE_URL + finalUrl)
@@ -320,7 +346,7 @@ public class Api {
                                 while ((line = br.readLine()) != null) {
                                     sBuilder1.append(line).append("\n");
                                 }
-                                Log.e(TAG, "call: " + sBuilder1);
+                                log("response",sBuilder1.toString());
                                 if (!sBuilder1.toString().trim().isEmpty()) {
                                     Object json = new JSONTokener(sBuilder1.toString()).nextValue();
                                     if (json instanceof JSONObject) {
@@ -329,7 +355,6 @@ public class Api {
                                             String success = jsonObject.getString("res");
                                             String message = jsonObject.getString("msg");
                                             if (success.matches("success")) {
-                                                Log.e(TAG, "call: in");
                                                 String data = jsonObject.getString("data");
                                                 Object json1 = new JSONTokener(data).nextValue();
                                                 if (json1 instanceof JSONObject) {
@@ -390,18 +415,141 @@ public class Api {
 
 
         } else {
-            Log.e(TAG, "call: no internet ");
+            log("check internet","no internet");
             showNoInternet(response);
         }
     }
 
+    private static final int MAX_RETRIES = 3;
+    private static final int INITIAL_BACKOFF_SECONDS = 1;
+
+    public void execute(String url, @NonNull Response response) {
+        dismissInternet();
+
+        if (!checkInternet()) {
+            log("internet check","no internet");
+            showNoInternet(response);
+            return;
+        }
+
+        execute(url, response, MAX_RETRIES, INITIAL_BACKOFF_SECONDS);
+    }
+
+    private boolean freshData = true;
+
+    public void setFreshData(boolean freshData) {
+        this.freshData = freshData;
+    }
+
+    private void execute(String url, @NonNull Response response, int retries, int backoffSeconds) {
+        final String finalUrl = url;
+        if ("GET".equals(method)) {
+            url = embedUrl(url);
+        } else {
+            if (perms != null && !perms.isEmpty()) {
+                setPerms();
+            } else {
+                if (body == null) {
+                    body = (builder != null) ? builder.build() : RequestBody.create(MediaType.parse("text/plain"), "");
+                }
+            }
+        }
+
+        showProgress();
+        log("called url",BASE_URL + finalUrl);
+        Request request = new Request.Builder()
+                .url(BASE_URL + url)
+                .method(method, body)
+                .cacheControl(new CacheControl.Builder()
+                        .maxStale(freshData ? 0:1, TimeUnit.HOURS) // Accept cached response up to 7 days old
+                        .build())
+                .build();
+
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                e.printStackTrace();
+                if (retries > 0) {
+                    int nextBackoffSeconds = backoffSeconds * 2; // Exponential backoff
+                    new Handler(Looper.getMainLooper()).postDelayed(() ->
+                            execute(finalUrl, response, retries - 1, nextBackoffSeconds), nextBackoffSeconds * 1000L);
+                } else {
+                    handleFailure(response, 500, e.getMessage(), new Handler(Looper.getMainLooper()));
+                }
+            }
+
+            @Override
+            public void onResponse(@NonNull Call call, @NonNull okhttp3.Response res) throws IOException {
+                try (ResponseBody responseBody = res.body()) {
+                    if (!res.isSuccessful()) {
+                        handleFailure(response, res.code(), res.message().isEmpty() ? "Page Not Found" : res.message(), new Handler(Looper.getMainLooper()));
+                        return;
+                    }
+
+                    String responseBodyString = responseBody != null ? responseBody.string() : "";;
+                    log("response",responseBodyString);
+                    processResponse(responseBodyString, res.code(), response, new Handler(Looper.getMainLooper()));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    handleFailure(response, 500, e.getMessage(), new Handler(Looper.getMainLooper()));
+                } finally {
+                    dismissProgress();
+                }
+            }
+        });
+    }
+
+    private void processResponse(String responseBody, int responseCode, Response response, Handler handler) {
+        try {
+            Object json = new JSONTokener(responseBody).nextValue();
+
+            if (json instanceof JSONObject) {
+                JSONObject jsonObject = new JSONObject(responseBody);
+                if (jsonObject.has("res")) {
+                    String success = jsonObject.getString("res");
+                    String message = jsonObject.getString("msg");
+
+                    if ("success".equals(success)) {
+                        String data = jsonObject.optString("data");
+                        Object jsonData = new JSONTokener(data).nextValue();
+                        if (jsonData instanceof JSONObject) {
+                            handler.post(() -> response.onSuccess((JSONObject) jsonData));
+                        } else if (jsonData instanceof JSONArray) {
+                            handler.post(() -> response.onSuccess((JSONArray) jsonData));
+                        } else {
+                            handler.post(() -> response.onSuccess(data));
+                        }
+                    } else {
+                        handler.post(() -> response.onFailed(responseCode, message));
+                    }
+                } else {
+                    handler.post(() -> response.onSuccess(jsonObject));
+                }
+            } else if (json instanceof JSONArray) {
+                handler.post(() -> response.onSuccess((JSONArray) json));
+            } else {
+                handler.post(() -> response.onSuccess(responseBody));
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+            handler.post(() -> response.onFailed(500, "Error parsing response"));
+        }
+    }
+
+    private void handleFailure(Response response, int statusCode, String errorMessage, Handler handler) {
+        dismissProgress();
+        handler.post(() -> response.onFailed(statusCode, errorMessage));
+    }
+
+
+
     private void showNoInternet(Response response) {
-        if (activity != null) {
+        if (context != null) {
             if (response.getContext() != null) {
                 response.onFailed(0, "No Internet Connection");
             } else {
-                if (activity != null) {
-                    response.with(activity);
+                if (context != null) {
+                    response.with(context);
                     response.onFailed(0, "No Internet Connection");
                 }
             }
@@ -409,33 +557,33 @@ public class Api {
         showInternet();
     }
 
+    private <T> void showNoInternet(ResponseCallback<T> callback) {
+        // Implement showNoInternet logic
+        callback.onFailed(0,"No Internet Connection");
+        showInternet();
+    }
+
     private boolean checkInternet() {
         String status = null;
-        Context con;
-        if (context == null) {
-            con = activity;
-        } else {
-            con = context;
-        }
-        if (con==null){
-            Log.e(TAG, "checkInternet: UNABLE TO CHECK this is background process");
+        if (context==null){
+            log("checkInternet","UNABLE TO CHECK this is background process");
             return true;
         }
-        ConnectivityManager cm = (ConnectivityManager) con.getSystemService(Context.CONNECTIVITY_SERVICE);
+        ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
         if (activeNetwork != null) {
             if (activeNetwork.getType() == ConnectivityManager.TYPE_WIFI) {
                 status = "Wifi enabled";
-                Log.e(TAG, "checkInternet: " + status);
+                log("checkInternet",status);
                 return true;
             } else if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE) {
                 status = "Mobile data enabled";
-                Log.e(TAG, "checkInternet: " + status);
+                log("checkInternet",status);
                 return true;
             }
         } else {
             status = "No internet is available";
-            Log.e(TAG, "checkInternet: " + status);
+            log("checkInternet",status);
             return false;
         }
 
@@ -452,6 +600,18 @@ public class Api {
             }
         }
         return u.toString();
+    }
+
+    private Environment environment = Environment.DEBUG;
+
+    public void setEnvironment(Environment environment) {
+        this.environment = environment;
+    }
+
+    private void log(String type, String string){
+        if(environment == Environment.DEBUG) {
+            Log.e(TAG, "log: " + type + " : " + string);
+        }
     }
 
 }
