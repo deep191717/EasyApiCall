@@ -64,6 +64,7 @@ public class Api {
         client = new OkHttpClient.Builder()
                 .cache(cache)
                 .addInterceptor(loggingInterceptor)
+                .addInterceptor(new GzipRequestInterceptor())
                 .connectionPool(new ConnectionPool(5, 5, TimeUnit.MINUTES))
                 .connectTimeout(30, TimeUnit.SECONDS) // Increase connection timeout
                 .readTimeout(30, TimeUnit.SECONDS)    // Increase read timeout
@@ -81,6 +82,7 @@ public class Api {
         loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
         client = new OkHttpClient.Builder()
                 .addInterceptor(loggingInterceptor)
+                .addInterceptor(new GzipRequestInterceptor())
                 .connectionPool(new ConnectionPool(5, 5, TimeUnit.MINUTES))
                 .connectTimeout(30, TimeUnit.SECONDS) // Increase connection timeout
                 .readTimeout(30, TimeUnit.SECONDS)    // Increase read timeout
@@ -442,8 +444,9 @@ public class Api {
 
     private boolean freshData = true;
 
-    public void setFreshData(boolean freshData) {
+    public Api setFreshData(boolean freshData) {
         this.freshData = freshData;
+        return this;
     }
 
     private void execute(CircuitBreaker circuitBreaker,String url, @NonNull Response response, int retries, int backoffSeconds) {
@@ -471,10 +474,9 @@ public class Api {
         Request request = new Request.Builder()
                 .url(BASE_URL + url)
                 .method(method, body)
-                .header("Content-Type", "application/json")
+                .header("Content-Type", "application/json; charset=utf-8")
                 .header("Accept", "application/json")
-                .header("Connection", "keep-alive")
-                .header("Accept-Encoding", "gzip, deflate")
+//                .header("Accept-Encoding", "gzip")
                 .cacheControl(new CacheControl.Builder()
                         .maxStale(freshData ? 0:1, TimeUnit.HOURS) // Accept cached response up to 7 days old
                         .build())
@@ -623,8 +625,9 @@ public class Api {
 
     private Environment environment = Environment.DEBUG;
 
-    public void setEnvironment(Environment environment) {
+    public Api setEnvironment(Environment environment) {
         this.environment = environment;
+        return this;
     }
 
     private void log(String type, String string){

@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.deep.apicall.Api;
 import com.deep.apicall.BaseActivity;
+import com.deep.apicall.Environment;
 import com.deep.apicall.RequestMethod;
 import com.deep.apicall.Response;
 
@@ -18,9 +19,11 @@ public class MainActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Api.with("MainActivity","https://google.com/")
+        Api.with("MainActivity","https://reqres.in/")
+                .setEnvironment(Environment.DEBUG)
                 .setRequestMethod(RequestMethod.GET)
-                .execute("h", new Response() {
+                .setSubFolder("api")
+                .execute("users", new Response() {
             @Override
             public void onSuccess(JSONObject jsonObject) {
                 super.onSuccess(jsonObject);
@@ -32,8 +35,8 @@ public class MainActivity extends BaseActivity {
             }
         });
 
-        setCrop(true);
-        setCapture(true);
-        checkCaptureImagePermission(findViewById(R.id.img));
+//        setCrop(true);
+//        setCapture(true);
+//        checkCaptureImagePermission(findViewById(R.id.img));
     }
 }
