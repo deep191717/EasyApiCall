@@ -1,6 +1,5 @@
 package com.deep.apicall;
 
-import android.app.Activity;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -36,12 +35,14 @@ import okhttp3.Cache;
 import okhttp3.CacheControl;
 import okhttp3.Call;
 import okhttp3.Callback;
+import okhttp3.ConnectionPool;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.ResponseBody;
+import okhttp3.logging.HttpLoggingInterceptor;
 
 public class Api {
 
@@ -58,11 +59,15 @@ public class Api {
         File httpCacheDirectory = new File(context.getCacheDir(), "http-cache");
         int cacheSize = 10 * 1024 * 1024; // 10 MiB
         Cache cache = new Cache(httpCacheDirectory, cacheSize);
+        HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
+        loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
         client = new OkHttpClient.Builder()
                 .cache(cache)
+                .addInterceptor(loggingInterceptor)
+                .connectionPool(new ConnectionPool(5, 5, TimeUnit.MINUTES))
                 .connectTimeout(30, TimeUnit.SECONDS) // Increase connection timeout
                 .readTimeout(30, TimeUnit.SECONDS)    // Increase read timeout
-                .writeTimeout(30, TimeUnit.SECONDS)   // Increase write timeout
+                .writeTimeout(30, TimeUnit.SECONDS)// Increase write timeout
                 .build();
         this.context = context;
         this.BASE_URL = baseUrl;
@@ -72,11 +77,11 @@ public class Api {
     }
 
     public Api(String TAG,String baseUrl) {
-        File httpCacheDirectory = new File(context.getCacheDir(), "http-cache");
-        int cacheSize = 10 * 1024 * 1024; // 10 MiB
-        Cache cache = new Cache(httpCacheDirectory, cacheSize);
+        HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
+        loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
         client = new OkHttpClient.Builder()
-                .cache(cache)
+                .addInterceptor(loggingInterceptor)
+                .connectionPool(new ConnectionPool(5, 5, TimeUnit.MINUTES))
                 .connectTimeout(30, TimeUnit.SECONDS) // Increase connection timeout
                 .readTimeout(30, TimeUnit.SECONDS)    // Increase read timeout
                 .writeTimeout(30, TimeUnit.SECONDS)   // Increase write timeout
@@ -431,8 +436,8 @@ public class Api {
             showNoInternet(response);
             return;
         }
-
-        execute(url, response, MAX_RETRIES, INITIAL_BACKOFF_SECONDS);
+        CircuitBreaker circuitBreaker = new CircuitBreaker(3, 10000);
+        execute(circuitBreaker,url, response, MAX_RETRIES, INITIAL_BACKOFF_SECONDS);
     }
 
     private boolean freshData = true;
@@ -441,7 +446,13 @@ public class Api {
         this.freshData = freshData;
     }
 
-    private void execute(String url, @NonNull Response response, int retries, int backoffSeconds) {
+    private void execute(CircuitBreaker circuitBreaker,String url, @NonNull Response response, int retries, int backoffSeconds) {
+
+        if (!circuitBreaker.allowRequest()) {
+            System.out.println("Circuit is open. Skipping request.");
+            return;
+        }
+
         final String finalUrl = url;
         if ("GET".equals(method)) {
             url = embedUrl(url);
@@ -460,6 +471,10 @@ public class Api {
         Request request = new Request.Builder()
                 .url(BASE_URL + url)
                 .method(method, body)
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("Connection", "keep-alive")
+                .header("Accept-Encoding", "gzip, deflate")
                 .cacheControl(new CacheControl.Builder()
                         .maxStale(freshData ? 0:1, TimeUnit.HOURS) // Accept cached response up to 7 days old
                         .build())
@@ -469,10 +484,11 @@ public class Api {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 e.printStackTrace();
+                circuitBreaker.recordFailure();
                 if (retries > 0) {
                     int nextBackoffSeconds = backoffSeconds * 2; // Exponential backoff
                     new Handler(Looper.getMainLooper()).postDelayed(() ->
-                            execute(finalUrl, response, retries - 1, nextBackoffSeconds), nextBackoffSeconds * 1000L);
+                            execute(circuitBreaker,finalUrl, response, retries - 1, nextBackoffSeconds), nextBackoffSeconds * 1000L);
                 } else {
                     handleFailure(response, 500, e.getMessage(), new Handler(Looper.getMainLooper()));
                 }
@@ -482,15 +498,18 @@ public class Api {
             public void onResponse(@NonNull Call call, @NonNull okhttp3.Response res) throws IOException {
                 try (ResponseBody responseBody = res.body()) {
                     if (!res.isSuccessful()) {
+                        circuitBreaker.recordFailure();
                         handleFailure(response, res.code(), res.message().isEmpty() ? "Page Not Found" : res.message(), new Handler(Looper.getMainLooper()));
                         return;
                     }
 
+                    circuitBreaker.recordSuccess();
                     String responseBodyString = responseBody != null ? responseBody.string() : "";;
                     log("response",responseBodyString);
                     processResponse(responseBodyString, res.code(), response, new Handler(Looper.getMainLooper()));
                 } catch (IOException e) {
                     e.printStackTrace();
+                    circuitBreaker.recordFailure();
                     handleFailure(response, 500, e.getMessage(), new Handler(Looper.getMainLooper()));
                 } finally {
                     dismissProgress();
