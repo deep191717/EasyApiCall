@@ -1,14 +1,2 @@
 jdk:
   - openjdk17
-
-before_install:
-  - yes | sdkmanager "platforms;android-34"
-
-install:
-  - ./gradlew clean
-  - ./gradlew build
-
-notifications:
-  email:
-    recipients:
-      - deeprathi1717@gmail.com
