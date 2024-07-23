@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.library'
-//    id 'maven-publish'
+    id 'maven-publish'
 }
 
 android {
@@ -28,6 +28,9 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    publishing {
+        singleVariant('release')
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -50,6 +53,25 @@ tasks.withType(JavaCompile).configureEach {
 //            url "https://jitpack.io"
 //        }
 //    }
+//}
+//com.github.deep191717:EasyApiCall:2.1
+afterEvaluate {
+    publishing {
+        publications {
+            // Creates a Maven publication called "release".
+            release(MavenPublication) {
+                from components.release
+                groupId = 'com.github.deep191717'
+                artifactId = 'EasyApiCall'
+                version = '2.3.2.1'
+            }
+        }
+    }
+}
+
+//repositories {
+//    google()
+//    mavenCentral()
 //}
 
 dependencies {
