@@ -15,5 +15,5 @@ public interface ApiInterface {
 
     void onSuccess(String response);
 
-    void onFailed(int code, String exception);
+    void onFailed(int code, String exception,Environment environment);
 }

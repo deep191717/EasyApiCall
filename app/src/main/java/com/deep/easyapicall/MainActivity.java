@@ -2,8 +2,6 @@ package com.deep.easyapicall;
 
 import android.os.Bundle;
 
-import androidx.appcompat.app.AppCompatActivity;
-
 import com.deep.apicall.Api;
 import com.deep.apicall.BaseActivity;
 import com.deep.apicall.Environment;
@@ -19,21 +17,24 @@ public class MainActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Api.with("MainActivity","https://reqres.in/")
+        Api.with("MainActivity", "https://rapidrasoi.in/")
                 .setEnvironment(Environment.DEBUG)
-                .setRequestMethod(RequestMethod.GET)
+                .setRequestMethod(RequestMethod.POST)
                 .setSubFolder("api")
-                .execute("users", new Response() {
-            @Override
-            public void onSuccess(JSONObject jsonObject) {
-                super.onSuccess(jsonObject);
-            }
+                .setPerm("city_id", "10")
+                .setPerm("name", "")
+                .execute("get_college.php", new Response() {
+                    @Override
+                    public void onSuccess(JSONObject jsonObject) {
+                        super.onSuccess(jsonObject);
+                    }
 
-            @Override
-            public void onFailed(int code, String exception) {
-                super.onFailed(code, exception);
-            }
-        });
+                    @Override
+                    public void onFailed(int code, String exception, Environment environment) {
+                        super.onFailed(code, exception, environment);
+                    }
+
+                });
 
 //        setCrop(true);
 //        setCapture(true);

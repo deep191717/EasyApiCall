@@ -25,10 +25,6 @@ public abstract class Response implements ApiInterface {
         return context;
     }
 
-    public Response(Context context) {
-        this.context = context;
-    }
-
 
     @Override
     public void onSuccess(JSONArray jsonArray) {
@@ -51,18 +47,20 @@ public abstract class Response implements ApiInterface {
     }
 
     @Override
-    public void onFailed(int code, String exception) {
+    public void onFailed(int code, String exception,Environment environment) {
         String ex = "Api Response is Failed: "+code+"\nreason: "+exception;
         Log.e("Api Response", "onFailed: "+code+"\nreason: "+exception );
         if (code != 200 && code!=0) {
-            try {
-                if (context!=null) {
-                    AlertDialog.Builder noInternetBuilder = new AlertDialog.Builder(context);
-                    noInternetBuilder.setMessage(ex);
-                    noInternetBuilder.create().show();
+            if(environment.equals(Environment.DEBUG)) {
+                try {
+                    if (context != null) {
+                        AlertDialog.Builder noInternetBuilder = new AlertDialog.Builder(context);
+                        noInternetBuilder.setMessage(ex);
+                        noInternetBuilder.create().show();
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
             }
         }
     }

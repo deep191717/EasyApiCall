@@ -44,13 +44,14 @@ import okhttp3.RequestBody;
 import okhttp3.ResponseBody;
 import okhttp3.logging.HttpLoggingInterceptor;
 
+/** @noinspection unused*/
 public class Api {
 
-    private String BASE_URL = "";
+    private String BASE_URL;
     private String method;
     private ShowProgress showProgress;
     private ShowNoInternet showNoInternet;
-    private boolean canShowProgress = false;
+    private boolean canShowProgress = true;
     OkHttpClient client;
     Context context;
     String TAG;
@@ -64,7 +65,7 @@ public class Api {
         client = new OkHttpClient.Builder()
                 .cache(cache)
                 .addInterceptor(loggingInterceptor)
-                .addInterceptor(new GzipRequestInterceptor())
+//                .addInterceptor(new GzipRequestInterceptor())
                 .connectionPool(new ConnectionPool(5, 5, TimeUnit.MINUTES))
                 .connectTimeout(30, TimeUnit.SECONDS) // Increase connection timeout
                 .readTimeout(30, TimeUnit.SECONDS)    // Increase read timeout
@@ -82,7 +83,7 @@ public class Api {
         loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
         client = new OkHttpClient.Builder()
                 .addInterceptor(loggingInterceptor)
-                .addInterceptor(new GzipRequestInterceptor())
+//                .addInterceptor(new GzipRequestInterceptor())
                 .connectionPool(new ConnectionPool(5, 5, TimeUnit.MINUTES))
                 .connectTimeout(30, TimeUnit.SECONDS) // Increase connection timeout
                 .readTimeout(30, TimeUnit.SECONDS)    // Increase read timeout
@@ -102,19 +103,10 @@ public class Api {
 
     public Api setRequestMethod(RequestMethod requestMethod) {
         switch (requestMethod) {
-            case POST:
-                method = "POST";
-                break;
-            case PUT:
-                method = "PUT";
-                break;
-            case DELETE:
-                method = "DELETE";
-                break;
-            case GET:
-            default:
-                method = "GET";
-                break;
+            case POST -> method = "POST";
+            case PUT -> method = "PUT";
+            case DELETE -> method = "DELETE";
+            case GET -> method = "GET";
         }
         return this;
     }
@@ -312,27 +304,25 @@ public class Api {
             showProgress();
             ExecutorService executor = Executors.newSingleThreadExecutor();
             Handler handler = new Handler(Looper.getMainLooper());
-            executor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    try {
+            executor.execute(() -> {
+                try {
 
 //                String PROXY_SERVER_HOST = "promotionwala.co.in";
 //                int PROXY_SERVER_PORT = 8088;
 //                Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(PROXY_SERVER_HOST, PROXY_SERVER_PORT));
 
-                        OkHttpClient client = new OkHttpClient().newBuilder()
-                                .build();
-                        //MediaType mediaType = MediaType.parse("text/plain");
+                    OkHttpClient client = new OkHttpClient().newBuilder()
+                            .build();
+                    //MediaType mediaType = MediaType.parse("text/plain");
 
-                        log("called url",BASE_URL + finalUrl);
+                    log("called url",BASE_URL + finalUrl);
 
-                        Request request = new Request.Builder()
-                                .url(BASE_URL + finalUrl)
-                                .method(method, body)
-                                .build();
-                        okhttp3.Response res = client.newCall(request).execute();
-                        //Log.e(TAG, "call: "+res.headers());
+                    Request request = new Request.Builder()
+                            .url(BASE_URL + finalUrl)
+                            .method(method, body)
+                            .build();
+                    okhttp3.Response res = client.newCall(request).execute();
+                    //Log.e(TAG, "call: "+res.headers());
 
 //                List<String> Cookielist = res.headers().values("Set-Cookie");
 //                for (String s : Cookielist){
@@ -341,19 +331,22 @@ public class Api {
 //                String v = (Cookielist .get(0).split(";"))[0];
 //                Log.e(TAG, "call: "+jsessionid );
 
-                        int responseCode = res.code();
-                        StringBuilder sBuilder1 = new StringBuilder();
+                    int responseCode = res.code();
+                    StringBuilder sBuilder1 = new StringBuilder();
 
-                        if (responseCode == HttpsURLConnection.HTTP_OK) {
-                            String line;
-                            ResponseBody responseBody = res.body();
+                    if (responseCode == HttpsURLConnection.HTTP_OK) {
+                        String line;
+                        ResponseBody responseBody = res.body();
 
-                            try {
-                                BufferedReader br = new BufferedReader(new InputStreamReader(responseBody.byteStream()));
+                        try {
+                            BufferedReader br;
+                            if (responseBody != null) {
+                                br = new BufferedReader(new InputStreamReader(responseBody.byteStream()));
+
                                 while ((line = br.readLine()) != null) {
                                     sBuilder1.append(line).append("\n");
                                 }
-                                log("response",sBuilder1.toString());
+                                log("response", sBuilder1.toString());
                                 if (!sBuilder1.toString().trim().isEmpty()) {
                                     Object json = new JSONTokener(sBuilder1.toString()).nextValue();
                                     if (json instanceof JSONObject) {
@@ -376,9 +369,9 @@ public class Api {
 
                                             } else {
                                                 dismissProgress();
-                                                handler.post(() -> response.onFailed(responseCode, message));
+                                                handler.post(() -> response.onFailed(responseCode, message, environment));
                                             }
-                                        }else {
+                                        } else {
                                             dismissProgress();
                                             handler.post(() -> response.onSuccess((JSONObject) json));
                                         }
@@ -390,33 +383,34 @@ public class Api {
                                         handler.post(() -> response.onSuccess(sBuilder1.toString()));
                                     }
                                 } else {
-
                                     dismissProgress();
-                                    handler.post(() -> response.onFailed(responseCode, "No Request Found For this Data."));
-
+                                    handler.post(() -> response.onFailed(responseCode, "No Request Found For this Data.", environment));
                                 }
-                            } catch (Exception e) {
-                                e.printStackTrace();
-
+                            }else{
                                 dismissProgress();
-                                handler.post(() -> response.onFailed(responseCode, "No Request Found For this Data. due to exception"));
-
+                                handler.post(() -> response.onFailed(responseCode, "No Request Found For this Data.", environment));
                             }
-
-                        } else {
+                        } catch (Exception e) {
+                            e.printStackTrace();
 
                             dismissProgress();
-                            handler.post(() -> response.onFailed(responseCode, res.message().isEmpty() ? "Page Not Found" : res.message()));
+                            handler.post(() -> response.onFailed(responseCode, "No Request Found For this Data. due to exception",environment));
 
                         }
 
-                    } catch (Exception e) {
-                        e.printStackTrace();
+                    } else {
 
                         dismissProgress();
-                        handler.post(() -> response.onFailed(500, e.getMessage()));
+                        handler.post(() -> response.onFailed(responseCode, res.message().isEmpty() ? "Page Not Found" : res.message(),environment));
 
                     }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+
+                    dismissProgress();
+                    handler.post(() -> response.onFailed(500, e.getMessage(),environment));
+
                 }
             });
 
@@ -469,14 +463,16 @@ public class Api {
             }
         }
 
+
+//                .header("Content-Type", "application/json; charset=utf-8")
+//                .header("Accept", "application/json")
+//                .header("Accept-Encoding", "gzip")
+
         showProgress();
         log("called url",BASE_URL + finalUrl);
         Request request = new Request.Builder()
                 .url(BASE_URL + url)
                 .method(method, body)
-                .header("Content-Type", "application/json; charset=utf-8")
-                .header("Accept", "application/json")
-//                .header("Accept-Encoding", "gzip")
                 .cacheControl(new CacheControl.Builder()
                         .maxStale(freshData ? 0:1, TimeUnit.HOURS) // Accept cached response up to 7 days old
                         .build())
@@ -497,7 +493,7 @@ public class Api {
             }
 
             @Override
-            public void onResponse(@NonNull Call call, @NonNull okhttp3.Response res) throws IOException {
+            public void onResponse(@NonNull Call call, @NonNull okhttp3.Response res) {
                 try (ResponseBody responseBody = res.body()) {
                     if (!res.isSuccessful()) {
                         circuitBreaker.recordFailure();
@@ -506,7 +502,7 @@ public class Api {
                     }
 
                     circuitBreaker.recordSuccess();
-                    String responseBodyString = responseBody != null ? responseBody.string() : "";;
+                    String responseBodyString = responseBody != null ? responseBody.string() : "";
                     log("response",responseBodyString);
                     processResponse(responseBodyString, res.code(), response, new Handler(Looper.getMainLooper()));
                 } catch (IOException e) {
@@ -541,7 +537,7 @@ public class Api {
                             handler.post(() -> response.onSuccess(data));
                         }
                     } else {
-                        handler.post(() -> response.onFailed(responseCode, message));
+                        handler.post(() -> response.onFailed(responseCode, message,environment));
                     }
                 } else {
                     handler.post(() -> response.onSuccess(jsonObject));
@@ -553,13 +549,13 @@ public class Api {
             }
         } catch (JSONException e) {
             e.printStackTrace();
-            handler.post(() -> response.onFailed(500, "Error parsing response"));
+            handler.post(() -> response.onFailed(500, "Error parsing response",environment));
         }
     }
 
     private void handleFailure(Response response, int statusCode, String errorMessage, Handler handler) {
         dismissProgress();
-        handler.post(() -> response.onFailed(statusCode, errorMessage));
+        handler.post(() -> response.onFailed(statusCode, errorMessage,environment));
     }
 
 
@@ -567,15 +563,15 @@ public class Api {
     private void showNoInternet(Response response) {
         if (context != null) {
             if (response.getContext() != null) {
-                response.onFailed(0, "No Internet Connection");
+                response.onFailed(0, "No Internet Connection",environment);
             } else {
                 if (context != null) {
                     response.with(context);
-                    response.onFailed(0, "No Internet Connection");
+                    response.onFailed(0, "No Internet Connection",environment);
                 }
             }
+            showInternet();
         }
-        showInternet();
     }
 
     private <T> void showNoInternet(ResponseCallback<T> callback) {
@@ -585,7 +581,7 @@ public class Api {
     }
 
     private boolean checkInternet() {
-        String status = null;
+        String status;
         if (context==null){
             log("checkInternet","UNABLE TO CHECK this is background process");
             return true;
@@ -623,7 +619,7 @@ public class Api {
         return u.toString();
     }
 
-    private Environment environment = Environment.DEBUG;
+    private Environment environment = Environment.LIVE;
 
     public Api setEnvironment(Environment environment) {
         this.environment = environment;
